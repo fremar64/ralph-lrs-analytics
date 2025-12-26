@@ -22,7 +22,7 @@ services:
 
   # Ralph LRS - Learning Record Store
   ralph:
-    image: fundocker/ralph:4.4.0
+    image: fundocker/ralph:5.0.1
     container_name: ralph_lrs
     restart: unless-stopped
     environment:
