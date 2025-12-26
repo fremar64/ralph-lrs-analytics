@@ -1,0 +1,33 @@
+# Environment variables (secrets)
+.env
+
+# Authentication
+auth.json
+
+# Data directories
+data/
+logs/
+
+# Backups
+backups/
+*.backup
+*.dump
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
