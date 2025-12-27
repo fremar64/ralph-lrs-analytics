@@ -107,7 +107,7 @@ services:
   # Apache Superset - Analytics avancés
   # Apache Superset - Analytics avancés
   superset:
-    image: apache/superset:5.0.1
+    image: apache/superset:4.0.2
     container_name: ralph_superset
     restart: unless-stopped
     environment:
