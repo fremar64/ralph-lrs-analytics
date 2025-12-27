@@ -51,6 +51,7 @@ services:
         condition: service_healthy
     networks:
       - coolify
+    command: ["ralph", "runserver", "--backend", "clickhouse"]  
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ralph-lrs.rule=Host(`${RALPH_DOMAIN}`)"
