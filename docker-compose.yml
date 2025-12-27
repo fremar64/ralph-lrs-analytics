@@ -105,8 +105,9 @@ services:
       retries: 5
 
   # Apache Superset - Analytics avancés
+  # Apache Superset - Analytics avancés
   superset:
-    image: apache/superset:4.0.2
+    image: apache/superset:5.0.1
     container_name: ralph_superset
     restart: unless-stopped
     environment:
@@ -131,22 +132,13 @@ services:
         condition: service_healthy
     networks:
       - coolify
-    command: >
-      sh -c "superset db upgrade &&
-             superset fab create-admin \
-               --username ${SUPERSET_ADMIN_USER:-admin} \
-               --firstname Admin \
-               --lastname User \
-               --email ${SUPERSET_ADMIN_EMAIL:-admin@example.com} \
-               --password ${SUPERSET_ADMIN_PASSWORD} || true &&
-             superset init &&
-             gunicorn \
-               --bind 0.0.0.0:8088 \
-               --workers 4 \
-               --timeout 300 \
-               --limit-request-line 0 \
-               --limit-request-field_size 0 \
-               'superset.app:create_app()'"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        superset db upgrade
+        superset fab create-admin --username $${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email $${SUPERSET_ADMIN_EMAIL:-admin@example.com} --password $${SUPERSET_ADMIN_PASSWORD} || true
+        superset init
+        gunicorn --bind 0.0.0.0:8088 --workers 4 --timeout 300 --limit-request-line 0 --limit-request-field_size 0 'superset.app:create_app()'
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.superset-ralph.rule=Host(`${SUPERSET_DOMAIN}`)"
