@@ -1,17 +1,22 @@
 services:
-  # ClickHouse - Base de données analytique pour Ralph
   clickhouse:
-    image: clickhouse/clickhouse-server:24-alpine
+    image: 'clickhouse/clickhouse-server:24-alpine'
     container_name: ralph_clickhouse
     restart: unless-stopped
+    cap_add:
+      - SYS_NICE
+      - NET_ADMIN
+      - IPC_LOCK
+    security_opt:
+      - seccomp:unconfined
     environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ralph}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ralph}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: '${CLICKHOUSE_DB:-ralph}'
+      CLICKHOUSE_USER: '${CLICKHOUSE_USER:-ralph}'
+      CLICKHOUSE_PASSWORD: '${CLICKHOUSE_PASSWORD}'
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - clickhouse_logs:/var/log/clickhouse-server
+      - 'clickhouse_data:/var/lib/clickhouse'
+      - 'clickhouse_logs:/var/log/clickhouse-server'
     networks:
       - coolify
     healthcheck:
@@ -20,83 +25,93 @@ services:
       timeout: 5s
       retries: 5
 
-  # Ralph LRS - Learning Record Store
   ralph:
-    image: fundocker/ralph:5.0.1
+    image: 'fundocker/ralph:5.0.1'
     container_name: ralph_lrs
     restart: unless-stopped
     environment:
-      # Backend configuration (ClickHouse)
+      # Configuration pour le serveur LRS (API)
+      RALPH_BACKENDS__LRS__CLICKHOUSE__HOST: clickhouse
+      RALPH_BACKENDS__LRS__CLICKHOUSE__PORT: 8123
+      RALPH_BACKENDS__LRS__CLICKHOUSE__DATABASE: '${CLICKHOUSE_DB:-ralph}'
+      RALPH_BACKENDS__LRS__CLICKHOUSE__USERNAME: '${CLICKHOUSE_USER:-ralph}'
+      RALPH_BACKENDS__LRS__CLICKHOUSE__PASSWORD: '${CLICKHOUSE_PASSWORD}'
+      # Configuration pour les outils DATA (CLI)
       RALPH_BACKENDS__DATA__CLICKHOUSE__HOST: clickhouse
       RALPH_BACKENDS__DATA__CLICKHOUSE__PORT: 8123
-      RALPH_BACKENDS__DATA__CLICKHOUSE__DATABASE: ${CLICKHOUSE_DB:-ralph}
-      RALPH_BACKENDS__DATA__CLICKHOUSE__USERNAME: ${CLICKHOUSE_USER:-ralph}
-      RALPH_BACKENDS__DATA__CLICKHOUSE__PASSWORD: ${CLICKHOUSE_PASSWORD}
-      
-      # Authentication
+      RALPH_BACKENDS__DATA__CLICKHOUSE__DATABASE: '${CLICKHOUSE_DB:-ralph}'
+      RALPH_BACKENDS__DATA__CLICKHOUSE__USERNAME: '${CLICKHOUSE_USER:-ralph}'
+      RALPH_BACKENDS__DATA__CLICKHOUSE__PASSWORD: '${CLICKHOUSE_PASSWORD}'
+      # Paramètres serveur
       RALPH_AUTH_FILE: /app/.ralph/auth.json
       RALPH_RUNSERVER_BACKEND: clickhouse
-      
-      # API Settings
       RALPH_RUNSERVER_HOST: 0.0.0.0
       RALPH_RUNSERVER_PORT: 8100
-      
-      # Logging
       RALPH_LOGGING_LEVEL: INFO
     volumes:
-      - ralph_data:/app/.ralph
-      - ./auth.json:/app/.ralph/auth.json:ro
+      - 'ralph_data:/app/.ralph'
+      - './auth.json:/app/.ralph/auth.json:ro'
     depends_on:
       clickhouse:
         condition: service_healthy
     networks:
       - coolify
-    command: ["ralph", "runserver", "--backend", "clickhouse"]  
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/xAPI/about"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command:
+      - ralph
+      - runserver
+      - '--backend'
+      - clickhouse
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ralph-lrs.rule=Host(`${RALPH_DOMAIN}`)"
-      - "traefik.http.routers.ralph-lrs.entrypoints=websecure"
-      - "traefik.http.routers.ralph-lrs.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ralph-lrs.loadbalancer.server.port=8100"
+      - traefik.enable=true
+      - 'traefik.http.routers.ralph-lrs.rule=Host(`${RALPH_DOMAIN}`)'
+      - traefik.http.routers.ralph-lrs.entrypoints=websecure
+      - traefik.http.routers.ralph-lrs.tls.certresolver=letsencrypt
+      - traefik.http.services.ralph-lrs.loadbalancer.server.port=8100
 
-  # Grafana - Dashboards et visualisations
   grafana:
-    image: grafana/grafana:11.3.0
+    image: 'grafana/grafana:11.3.0'
     container_name: ralph_grafana
     restart: unless-stopped
     environment:
-      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN}
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: 'https://${GRAFANA_DOMAIN}'
+      GF_SECURITY_ADMIN_USER: '${GRAFANA_ADMIN_USER:-admin}'
+      GF_SECURITY_ADMIN_PASSWORD: '${GRAFANA_ADMIN_PASSWORD}'
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
-      GF_AUTH_ANONYMOUS_ENABLED: false
-      GF_USERS_ALLOW_SIGN_UP: false
     volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - 'grafana_data:/var/lib/grafana'
+      - './grafana/provisioning:/etc/grafana/provisioning:ro'
     depends_on:
       clickhouse:
         condition: service_healthy
     networks:
       - coolify
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.grafana-ralph.rule=Host(`${GRAFANA_DOMAIN}`)"
-      - "traefik.http.routers.grafana-ralph.entrypoints=websecure"
-      - "traefik.http.routers.grafana-ralph.tls.certresolver=letsencrypt"
-      - "traefik.http.services.grafana-ralph.loadbalancer.server.port=3000"
+      - traefik.enable=true
+      - 'traefik.http.routers.grafana-ralph.rule=Host(`${GRAFANA_DOMAIN}`)'
+      - traefik.http.routers.grafana-ralph.entrypoints=websecure
+      - traefik.http.routers.grafana-ralph.tls.certresolver=letsencrypt
+      - traefik.http.services.grafana-ralph.loadbalancer.server.port=3000
 
-  # PostgreSQL pour Superset
   superset-db:
-    image: postgres:15-alpine
+    image: 'postgres:15-alpine'
     container_name: ralph_superset_db
     restart: unless-stopped
     environment:
       POSTGRES_DB: superset
       POSTGRES_USER: superset
-      POSTGRES_PASSWORD: ${SUPERSET_DB_PASSWORD}
+      POSTGRES_PASSWORD: '${SUPERSET_DB_PASSWORD}'
     volumes:
-      - superset_db_data:/var/lib/postgresql/data
+      - 'superset_db_data:/var/lib/postgresql/data'
     networks:
       - coolify
     healthcheck:
@@ -105,27 +120,24 @@ services:
       timeout: 5s
       retries: 5
 
-  # Apache Superset - Analytics avancés
-  # Apache Superset - Analytics avancés
   superset:
-    image: apache/superset:4.0.2
+    image: 'apache/superset:4.0.2'
     container_name: ralph_superset
     restart: unless-stopped
     environment:
-      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
-      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_SECRET_KEY: '${SUPERSET_SECRET_KEY}'
       DATABASE_DIALECT: postgresql
       DATABASE_HOST: superset-db
       DATABASE_PORT: 5432
       DATABASE_DB: superset
       DATABASE_USER: superset
-      DATABASE_PASSWORD: ${SUPERSET_DB_PASSWORD}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-ralph}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ralph}
+      DATABASE_PASSWORD: '${SUPERSET_DB_PASSWORD}'
+      CLICKHOUSE_USER: '${CLICKHOUSE_USER:-ralph}'
+      CLICKHOUSE_PASSWORD: '${CLICKHOUSE_PASSWORD}'
+      CLICKHOUSE_DB: '${CLICKHOUSE_DB:-ralph}'
     volumes:
-      - superset_data:/app/superset_home
-      - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - 'superset_data:/app/superset_home'
+      - './superset/superset_config.py:/app/pythonpath/superset_config.py:ro'
     depends_on:
       superset-db:
         condition: service_healthy
@@ -133,19 +145,17 @@ services:
         condition: service_healthy
     networks:
       - coolify
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        superset db upgrade
-        superset fab create-admin --username $${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email $${SUPERSET_ADMIN_EMAIL:-admin@example.com} --password $${SUPERSET_ADMIN_PASSWORD} || true
-        superset init
-        gunicorn --bind 0.0.0.0:8088 --workers 4 --timeout 300 --limit-request-line 0 --limit-request-field_size 0 'superset.app:create_app()'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.superset-ralph.rule=Host(`${SUPERSET_DOMAIN}`)"
-      - "traefik.http.routers.superset-ralph.entrypoints=websecure"
-      - "traefik.http.routers.superset-ralph.tls.certresolver=letsencrypt"
-      - "traefik.http.services.superset-ralph.loadbalancer.server.port=8088"
+      - traefik.enable=true
+      - 'traefik.http.routers.superset-ralph.rule=Host(`${SUPERSET_DOMAIN}`)'
+      - traefik.http.routers.superset-ralph.entrypoints=websecure
+      - traefik.http.routers.superset-ralph.tls.certresolver=letsencrypt
+      - traefik.http.services.superset-ralph.loadbalancer.server.port=8088
 
 networks:
   coolify:
