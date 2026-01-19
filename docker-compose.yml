@@ -26,7 +26,7 @@ services:
       retries: 5
 
   ralph:
-    image: 'fundocker/ralph:5.0.1'
+    image: 'fundocker/ralph:latest'
     container_name: ralph_lrs
     restart: unless-stopped
     environment:
@@ -43,10 +43,13 @@ services:
       RALPH_BACKENDS__DATA__CLICKHOUSE__USERNAME: '${CLICKHOUSE_USER:-ralph}'
       RALPH_BACKENDS__DATA__CLICKHOUSE__PASSWORD: '${CLICKHOUSE_PASSWORD}'
       # Paramètres serveur
+      # Authentification
       RALPH_AUTH_FILE: /app/.ralph/auth.json
       RALPH_RUNSERVER_BACKEND: clickhouse
+      # API Settings  
       RALPH_RUNSERVER_HOST: 0.0.0.0
       RALPH_RUNSERVER_PORT: 8100
+      # Logging
       RALPH_LOGGING_LEVEL: INFO
     volumes:
       - 'ralph_data:/app/.ralph'
